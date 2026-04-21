@@ -1,0 +1,33 @@
+[package]
+name = "kea"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "kea_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.52.1", features = ["full"] }
+reqwest = { version = "0.13.2", default-features = false, features = ["json", "multipart", "stream", "rustls"] }
+keyring = { version = "3.6.3", features = ["apple-native"] }
+sha2 = "0.11.0"
+hex = "0.4.3"
+anyhow = "1.0.102"
+chrono = { version = "0.4.44", features = ["serde"] }
+tauri-plugin-dialog = "2.7.0"
+tauri-plugin-fs = "2.5.0"
+
