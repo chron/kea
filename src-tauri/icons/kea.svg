@@ -1,0 +1,43 @@
+<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Rounded-square app icon background, deep forest -->
+  <rect width="256" height="256" rx="56" fill="#22302b"/>
+
+  <!-- Orange under-wing flash, peeking from behind the head -->
+  <path d="M 62 78 Q 150 88 168 128 Q 150 148 112 148 Q 80 140 62 110 Z"
+        fill="#ff7a3d"/>
+
+  <!-- Head: soft, pear-shaped, tapering toward the beak on the right -->
+  <path d="M 92 86
+           Q 58 108 60 150
+           Q 66 192 112 200
+           Q 168 200 188 170
+           Q 204 142 190 114
+           Q 168 82 130 80
+           Q 108 80 92 86 Z"
+        fill="#8fa17a"/>
+
+  <!-- Upper mandible: the kea's signature hook, curving down and back -->
+  <path d="M 184 134
+           Q 224 138 224 172
+           Q 222 192 200 192
+           Q 188 180 186 162
+           Q 184 148 184 134 Z"
+        fill="#1a1410"/>
+
+  <!-- Lower mandible: short, tucked beneath the hook -->
+  <path d="M 184 166
+           Q 196 180 204 194
+           Q 188 196 180 184
+           Q 180 174 184 166 Z"
+        fill="#2a2118"/>
+
+  <!-- Cere (the fleshy bit above the beak) — subtle -->
+  <path d="M 172 126
+           Q 190 128 192 138
+           Q 180 140 170 136 Z"
+        fill="#776453"/>
+
+  <!-- Eye: dark with a tiny cream glint -->
+  <circle cx="158" cy="122" r="7" fill="#1a1410"/>
+  <circle cx="160" cy="120" r="2.2" fill="#ece8dc"/>
+</svg>
