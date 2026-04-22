@@ -7,6 +7,7 @@ import {
   cutRange,
   formatTime,
   nextKeptSegmentAt,
+  remapTranscriptToEdited,
   sourceToEdited,
 } from "../../lib/timeline";
 import VideoPlayer from "./VideoPlayer";
@@ -178,7 +179,27 @@ export default function Editor({ videoPath, onClose }: Props) {
         })),
         outputPath: chosen,
       });
-      flash(`Exported: ${formatTime(result.durationSec)}`);
+
+      const outStem = chosen.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "edit";
+      let transcriptMsg = "";
+      if (project.transcript) {
+        const settings = await api.getSettings();
+        if (settings.vaultFolder) {
+          const remapped = remapTranscriptToEdited(project.transcript, project.segments);
+          await api.writeObsidianNote({
+            vaultFolder: settings.vaultFolder,
+            filenameStem: outStem,
+            sourcePath: project.sources[project.transcript.sourceIndex].path,
+            title: outStem,
+            segments: remapped.map((s) => ({ text: s.text })),
+          });
+          transcriptMsg = " + note";
+        } else {
+          transcriptMsg = " (vault not set)";
+        }
+      }
+
+      flash(`Exported: ${formatTime(result.durationSec)}${transcriptMsg}`);
     } catch (e) {
       setError(String(e));
     } finally {

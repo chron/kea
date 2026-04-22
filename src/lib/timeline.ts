@@ -1,4 +1,4 @@
-import type { Segment } from "./types";
+import type { Segment, Transcript, TranscriptSegment } from "./types";
 
 export function editedDuration(segments: Segment[]): number {
   return segments.reduce((sum, s) => sum + (s.endSec - s.startSec), 0);
@@ -94,6 +94,45 @@ export function nextKeptSegmentAt(
     }
   }
   return containing ?? next;
+}
+
+/**
+ * Rewrite transcript segments into edited-timeline space.
+ * Pieces entirely inside a cut are dropped; pieces that overlap one or more kept
+ * segments produce a single output anchored to the largest overlap, so the text
+ * isn't duplicated when a line straddles a cut.
+ */
+export function remapTranscriptToEdited(
+  transcript: Transcript,
+  segments: Segment[],
+): TranscriptSegment[] {
+  const out: TranscriptSegment[] = [];
+  for (const t of transcript.segments) {
+    let bestOverlap = 0;
+    let bestStartSource = 0;
+    let bestEndSource = 0;
+    for (const seg of segments) {
+      if (seg.sourceIndex !== transcript.sourceIndex) continue;
+      const overlapStart = Math.max(t.startSec, seg.startSec);
+      const overlapEnd = Math.min(t.endSec, seg.endSec);
+      const overlap = overlapEnd - overlapStart;
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        bestStartSource = overlapStart;
+        bestEndSource = overlapEnd;
+      }
+    }
+    if (bestOverlap <= 0) continue;
+    const editedStart = sourceToEdited(segments, transcript.sourceIndex, bestStartSource);
+    if (editedStart === null) continue;
+    out.push({
+      startSec: editedStart,
+      endSec: editedStart + (bestEndSource - bestStartSource),
+      text: t.text,
+    });
+  }
+  out.sort((a, b) => a.startSec - b.startSec);
+  return out;
 }
 
 export function formatTime(sec: number): string {

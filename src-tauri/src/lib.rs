@@ -2,7 +2,7 @@ mod commands;
 mod ffmpeg;
 mod paths;
 
-use commands::{export, project, settings, transcribe, video};
+use commands::{export, obsidian, project, settings, transcribe, video};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,6 +23,7 @@ pub fn run() {
             project::list_recent_projects,
             export::export_edit,
             transcribe::transcribe_source,
+            obsidian::write_obsidian_note,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

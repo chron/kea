@@ -29,6 +29,20 @@ export const api = {
     invoke<ExportResult>("export_edit", { request }),
   transcribeSource: (sourcePath: string, sourceIndex: number) =>
     invoke<Transcript>("transcribe_source", { sourcePath, sourceIndex }),
+  writeObsidianNote: (request: ObsidianNoteRequest) =>
+    invoke<string>("write_obsidian_note", { request }),
+};
+
+export type ObsidianTranscriptSegment = {
+  text: string;
+};
+
+export type ObsidianNoteRequest = {
+  vaultFolder: string;
+  filenameStem: string;
+  sourcePath: string;
+  title: string;
+  segments: ObsidianTranscriptSegment[];
 };
 
 export type ExportSegment = {
