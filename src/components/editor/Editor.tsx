@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../../lib/api";
-import type { Project } from "../../lib/types";
+import type { Project, SilenceRange } from "../../lib/types";
 import {
   clampToKept,
   cutRange,
@@ -29,6 +29,8 @@ export default function Editor({ videoPath, onClose }: Props) {
   const [outPoint, setOutPoint] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [detectingSilence, setDetectingSilence] = useState(false);
+  const [silences, setSilences] = useState<SilenceRange[]>([]);
   const [status, setStatus] = useState<string | null>(null);
 
   const source = project?.sources[0];
@@ -140,6 +142,55 @@ export default function Editor({ videoPath, onClose }: Props) {
     });
     flash(`Cut ${formatTime(end - start)}`);
   }, [project, inPoint, outPoint, flash]);
+
+  const detectSilence = useCallback(async () => {
+    if (!project) return;
+    setDetectingSilence(true);
+    try {
+      const settings = await api.getSettings();
+      const ranges = await api.detectSilence(
+        project.sources[0].path,
+        settings.silenceThresholdDb,
+        settings.silenceMinSec,
+      );
+      setSilences(ranges);
+      flash(
+        ranges.length === 0
+          ? "No silences found"
+          : `Found ${ranges.length} silence${ranges.length === 1 ? "" : "s"}`,
+      );
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setDetectingSilence(false);
+    }
+  }, [project, flash]);
+
+  const resetCuts = useCallback(() => {
+    if (!project) return;
+    const fullSpan = [
+      { sourceIndex: 0, startSec: 0, endSec: project.sources[0].durationSec },
+    ];
+    setProject({ ...project, segments: fullSpan });
+    setInPoint(null);
+    setOutPoint(null);
+    setSilences([]);
+    flash("Reset cuts");
+  }, [project, flash]);
+
+  const cutAllSilences = useCallback(() => {
+    if (!project || silences.length === 0) return;
+    let next = project.segments;
+    for (const s of silences) {
+      next = cutRange(next, 0, s.startSec, s.endSec);
+    }
+    setProject({ ...project, segments: next });
+    const count = silences.length;
+    setSilences([]);
+    setInPoint(null);
+    setOutPoint(null);
+    flash(`Cut ${count} silence${count === 1 ? "" : "s"}`);
+  }, [project, silences, flash]);
 
   const transcribe = useCallback(async () => {
     if (!project) return;
@@ -347,9 +398,14 @@ export default function Editor({ videoPath, onClose }: Props) {
         onSetOut={markOut}
         onClearMarkers={clearMarkers}
         onCutSelection={cutSelection}
+        onResetCuts={resetCuts}
         onExport={exportEdit}
+        onDetectSilence={detectSilence}
+        onCutAllSilences={cutAllSilences}
         canCut={canCut}
         exporting={exporting}
+        detectingSilence={detectingSilence}
+        silenceCount={silences.length}
         segments={project.segments}
         sourceDuration={duration}
       />
@@ -360,6 +416,7 @@ export default function Editor({ videoPath, onClose }: Props) {
         playheadSec={sourceTime}
         inPoint={inPoint}
         outPoint={outPoint}
+        silences={silences}
         onScrub={seek}
       />
 

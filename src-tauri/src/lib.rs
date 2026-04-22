@@ -2,7 +2,7 @@ mod commands;
 mod ffmpeg;
 mod paths;
 
-use commands::{export, obsidian, project, settings, transcribe, video};
+use commands::{export, obsidian, project, settings, silence, transcribe, video};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -24,6 +24,7 @@ pub fn run() {
             export::export_edit,
             transcribe::transcribe_source,
             obsidian::write_obsidian_note,
+            silence::detect_silence,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

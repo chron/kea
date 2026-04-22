@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import type { Segment } from "../../lib/types";
 import { editedDuration, formatTime } from "../../lib/timeline";
 
@@ -10,9 +11,14 @@ type Props = {
   onSetOut: () => void;
   onClearMarkers: () => void;
   onCutSelection: () => void;
+  onResetCuts: () => void;
   onExport: () => void;
+  onDetectSilence: () => void;
+  onCutAllSilences: () => void;
   canCut: boolean;
   exporting: boolean;
+  detectingSilence: boolean;
+  silenceCount: number;
   segments: Segment[];
   sourceDuration: number;
 };
@@ -26,9 +32,14 @@ export default function Toolbar({
   onSetOut,
   onClearMarkers,
   onCutSelection,
+  onResetCuts,
   onExport,
+  onDetectSilence,
+  onCutAllSilences,
   canCut,
   exporting,
+  detectingSilence,
+  silenceCount,
   segments,
   sourceDuration,
 }: Props) {
@@ -77,6 +88,42 @@ export default function Toolbar({
       >
         Cut
       </TextButton>
+
+      {cutCount > 0 && (
+        <TextButton
+          title="Restore all cuts to the original clip"
+          onClick={onResetCuts}
+        >
+          Reset
+        </TextButton>
+      )}
+
+      <Divider />
+
+      {silenceCount > 0 ? (
+        <TextButton
+          title={`Cut all ${silenceCount} detected silences`}
+          onClick={onCutAllSilences}
+          danger
+        >
+          Cut {silenceCount} silence{silenceCount === 1 ? "" : "s"}
+        </TextButton>
+      ) : (
+        <TextButton
+          title="Auto-detect silent stretches"
+          onClick={onDetectSilence}
+          disabled={detectingSilence}
+        >
+          {detectingSilence ? (
+            <span className="flex items-center gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Detecting…
+            </span>
+          ) : (
+            "Detect silence"
+          )}
+        </TextButton>
+      )}
 
       <div className="ml-auto flex items-center gap-3 font-mono text-xs text-text-dim">
         <span>

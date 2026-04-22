@@ -6,8 +6,8 @@ import type { LlmProvider, Settings } from "../lib/types";
 const DEFAULT_SETTINGS: Settings = {
   vaultFolder: null,
   llmProvider: "openai",
-  silenceThresholdDb: -30,
-  silenceMinSec: 0.8,
+  silenceThresholdDb: -45,
+  silenceMinSec: 1.5,
 };
 
 export default function SettingsView() {

@@ -33,10 +33,10 @@ fn default_provider() -> String {
     "openai".into()
 }
 fn default_silence_threshold() -> i32 {
-    -30
+    -45
 }
 fn default_silence_min_sec() -> f32 {
-    0.8
+    1.5
 }
 
 fn load_from_disk() -> Settings {

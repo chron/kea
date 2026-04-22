@@ -54,3 +54,8 @@ export type ProbeResult = {
   durationSec: number;
   codecInfo: string;
 };
+
+export type SilenceRange = {
+  startSec: number;
+  endSec: number;
+};

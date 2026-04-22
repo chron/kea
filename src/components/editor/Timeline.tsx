@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import type { Segment } from "../../lib/types";
+import type { Segment, SilenceRange } from "../../lib/types";
 import { formatTime } from "../../lib/timeline";
 
 type Props = {
@@ -8,6 +8,7 @@ type Props = {
   playheadSec: number;
   inPoint: number | null;
   outPoint: number | null;
+  silences?: SilenceRange[];
   onScrub: (sec: number) => void;
 };
 
@@ -17,6 +18,7 @@ export default function Timeline({
   playheadSec,
   inPoint,
   outPoint,
+  silences,
   onScrub,
 }: Props) {
   const barRef = useRef<HTMLDivElement>(null);
@@ -85,6 +87,18 @@ export default function Timeline({
               }}
             />
           ))}
+
+        {/* Detected silences */}
+        {silences?.map((s, i) => (
+          <div
+            key={`silence-${i}`}
+            className="pointer-events-none absolute top-0 bottom-0 bg-amber-400/25 ring-1 ring-amber-400/60"
+            style={{
+              left: `${pct(s.startSec)}%`,
+              width: `${pct(s.endSec - s.startSec)}%`,
+            }}
+          />
+        ))}
 
         {/* Selection range */}
         {selectionStart !== null && selectionEnd !== null && (

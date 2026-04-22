@@ -6,6 +6,7 @@ import type {
   Project,
   RecentProject,
   Settings,
+  SilenceRange,
   Transcript,
 } from "./types";
 
@@ -31,6 +32,8 @@ export const api = {
     invoke<Transcript>("transcribe_source", { sourcePath, sourceIndex }),
   writeObsidianNote: (request: ObsidianNoteRequest) =>
     invoke<string>("write_obsidian_note", { request }),
+  detectSilence: (sourcePath: string, thresholdDb: number, minSec: number) =>
+    invoke<SilenceRange[]>("detect_silence", { sourcePath, thresholdDb, minSec }),
 };
 
 export type ObsidianTranscriptSegment = {
