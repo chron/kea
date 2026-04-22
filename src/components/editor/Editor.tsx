@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../../lib/api";
+import { suggestFilename } from "../../lib/llm";
 import type { Project, SilenceRange } from "../../lib/types";
 import {
   clampToKept,
@@ -22,6 +23,7 @@ type Props = {
 
 export default function Editor({ videoPath, onClose }: Props) {
   const [project, setProject] = useState<Project | null>(null);
+  const [currentPath, setCurrentPath] = useState(videoPath);
   const [error, setError] = useState<string | null>(null);
   const [sourceTime, setSourceTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -31,6 +33,7 @@ export default function Editor({ videoPath, onClose }: Props) {
   const [transcribing, setTranscribing] = useState(false);
   const [detectingSilence, setDetectingSilence] = useState(false);
   const [silences, setSilences] = useState<SilenceRange[]>([]);
+  const [renaming, setRenaming] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   const source = project?.sources[0];
@@ -74,10 +77,10 @@ export default function Editor({ videoPath, onClose }: Props) {
       return;
     }
     const t = setTimeout(() => {
-      api.saveProject(videoPath, project).catch((e) => setError(String(e)));
+      api.saveProject(currentPath, project).catch((e) => setError(String(e)));
     }, 300);
     return () => clearTimeout(t);
-  }, [project, videoPath]);
+  }, [project, currentPath]);
 
   const flash = useCallback((msg: string) => {
     setStatus(msg);
@@ -199,12 +202,57 @@ export default function Editor({ videoPath, onClose }: Props) {
       const result = await api.transcribeSource(project.sources[0].path, 0);
       setProject((p) => (p ? { ...p, transcript: result } : p));
       flash(`Transcribed ${result.segments.length} segments`);
+
+      try {
+        const settings = await api.getSettings();
+        const text = result.segments.map((s) => s.text).join(" ");
+        const suggestion = await suggestFilename(text, settings.llmProvider);
+        if (suggestion) {
+          setProject((p) => (p ? { ...p, suggestedFilename: suggestion } : p));
+        }
+      } catch (e) {
+        console.warn("filename suggestion failed:", e);
+      }
     } catch (e) {
       setError(String(e));
     } finally {
       setTranscribing(false);
     }
   }, [project, flash]);
+
+  const acceptRename = useCallback(
+    async (stem: string) => {
+      if (!project) return;
+      const cleaned = stem.trim();
+      if (!cleaned) return;
+      setRenaming(true);
+      try {
+        const { newPath } = await api.renameSource(currentPath, cleaned);
+        setProject((p) =>
+          p
+            ? {
+                ...p,
+                sources: p.sources.map((s, i) =>
+                  i === 0 ? { ...s, path: newPath } : s,
+                ),
+                suggestedFilename: undefined,
+              }
+            : p,
+        );
+        setCurrentPath(newPath);
+        flash(`Renamed to ${cleaned}`);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setRenaming(false);
+      }
+    },
+    [project, currentPath, flash],
+  );
+
+  const dismissSuggestion = useCallback(() => {
+    setProject((p) => (p ? { ...p, suggestedFilename: undefined } : p));
+  }, []);
 
   const exportEdit = useCallback(async () => {
     if (!project) return;
@@ -364,8 +412,20 @@ export default function Editor({ videoPath, onClose }: Props) {
   const transcriptForSource0 =
     project.transcript && project.transcript.sourceIndex === 0 ? project.transcript : null;
 
+  const currentStem =
+    source.path.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+
   return (
     <div className="flex h-full flex-col">
+      <FilenameBar
+        currentStem={currentStem}
+        suggestion={project.suggestedFilename ?? null}
+        renaming={renaming}
+        onAccept={acceptRename}
+        onDismiss={dismissSuggestion}
+        onBack={onClose}
+      />
+
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-hidden">
           <VideoPlayer
@@ -428,6 +488,74 @@ export default function Editor({ videoPath, onClose }: Props) {
 
       {/* Keep editedPlayhead in the DOM only for debug if needed — exported for future transcript highlight. */}
       <div style={{ display: "none" }} data-edited-playhead={editedPlayhead} />
+    </div>
+  );
+}
+
+function FilenameBar({
+  currentStem,
+  suggestion,
+  renaming,
+  onAccept,
+  onDismiss,
+  onBack,
+}: {
+  currentStem: string;
+  suggestion: string | null;
+  renaming: boolean;
+  onAccept: (stem: string) => void;
+  onDismiss: () => void;
+  onBack: () => void;
+}) {
+  const [draft, setDraft] = useState(suggestion ?? "");
+
+  useEffect(() => {
+    setDraft(suggestion ?? "");
+  }, [suggestion]);
+
+  return (
+    <div className="flex shrink-0 items-center gap-3 border-b border-border bg-bg-raised px-4 py-2">
+      <button
+        onClick={onBack}
+        className="rounded-md px-2 py-1 text-xs text-text-dim hover:bg-bg-elevated hover:text-text"
+        title="Back to Home"
+      >
+        ←
+      </button>
+      <div className="font-mono text-sm text-text-dim">{currentStem}</div>
+
+      {suggestion && (
+        <div className="flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent/10 px-2 py-1">
+          <span className="text-[11px] uppercase tracking-wide text-accent">
+            Rename to
+          </span>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onAccept(draft);
+              if (e.key === "Escape") onDismiss();
+            }}
+            disabled={renaming}
+            className="w-64 rounded border border-border bg-bg px-2 py-0.5 font-mono text-xs text-text outline-none focus:border-accent"
+          />
+          <button
+            onClick={() => onAccept(draft)}
+            disabled={renaming || !draft.trim()}
+            className="rounded bg-accent px-2 py-0.5 text-xs font-medium text-black hover:bg-accent-hover disabled:opacity-50"
+          >
+            {renaming ? "Renaming…" : "Accept"}
+          </button>
+          <button
+            onClick={onDismiss}
+            disabled={renaming}
+            className="rounded px-1.5 py-0.5 text-xs text-text-dim hover:bg-bg-elevated hover:text-text"
+            title="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }

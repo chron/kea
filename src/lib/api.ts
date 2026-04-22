@@ -34,6 +34,12 @@ export const api = {
     invoke<string>("write_obsidian_note", { request }),
   detectSilence: (sourcePath: string, thresholdDb: number, minSec: number) =>
     invoke<SilenceRange[]>("detect_silence", { sourcePath, thresholdDb, minSec }),
+  renameSource: (oldPath: string, newStem: string) =>
+    invoke<RenameResult>("rename_source", { oldPath, newStem }),
+};
+
+export type RenameResult = {
+  newPath: string;
 };
 
 export type ObsidianTranscriptSegment = {

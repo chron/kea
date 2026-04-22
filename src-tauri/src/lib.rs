@@ -21,6 +21,7 @@ pub fn run() {
             project::load_project_by_path,
             project::save_project,
             project::list_recent_projects,
+            project::rename_source,
             export::export_edit,
             transcribe::transcribe_source,
             obsidian::write_obsidian_note,

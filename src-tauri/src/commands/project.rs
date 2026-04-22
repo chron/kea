@@ -1,6 +1,7 @@
 use crate::paths;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::Path;
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -68,6 +69,66 @@ pub fn save_project(video_path: String, project: Project) -> Result<(), String> 
 pub struct RecentProject {
     pub project: Project,
     pub modified_ms: u128,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameResult {
+    pub new_path: String,
+}
+
+#[tauri::command]
+pub fn rename_source(old_path: String, new_stem: String) -> Result<RenameResult, String> {
+    let trimmed = new_stem.trim();
+    if trimmed.is_empty() {
+        return Err("filename is empty".into());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains('\0') {
+        return Err("filename contains invalid characters".into());
+    }
+
+    let old = Path::new(&old_path);
+    let parent = old
+        .parent()
+        .ok_or_else(|| "source has no parent directory".to_string())?;
+    let ext = old
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("mp4");
+
+    let new_path = parent.join(format!("{}.{}", trimmed, ext));
+    if new_path.exists() {
+        return Err(format!(
+            "a file already exists at {}",
+            new_path.display()
+        ));
+    }
+
+    let old_project_path = paths::project_path_for(&old_path).map_err(|e| e.to_string())?;
+    let project_text = fs::read_to_string(&old_project_path)
+        .map_err(|e| format!("could not read project: {}", e))?;
+    let mut project: Project =
+        serde_json::from_str(&project_text).map_err(|e| format!("corrupt project: {}", e))?;
+
+    fs::rename(old, &new_path).map_err(|e| format!("rename failed: {}", e))?;
+
+    let new_path_str = new_path.to_string_lossy().to_string();
+    if let Some(src) = project.sources.get_mut(0) {
+        src.path = new_path_str.clone();
+    }
+    project.suggested_filename = None;
+
+    let new_project_path =
+        paths::project_path_for(&new_path_str).map_err(|e| e.to_string())?;
+    let out = serde_json::to_string_pretty(&project).map_err(|e| e.to_string())?;
+    fs::write(&new_project_path, out).map_err(|e| e.to_string())?;
+    if new_project_path != old_project_path {
+        let _ = fs::remove_file(&old_project_path);
+    }
+
+    Ok(RenameResult {
+        new_path: new_path_str,
+    })
 }
 
 #[tauri::command]
