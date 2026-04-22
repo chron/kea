@@ -254,6 +254,47 @@ export default function Editor({ videoPath, onClose }: Props) {
     [project, flash],
   );
 
+  const removeSource = useCallback(
+    (index: number) => {
+      if (!project) return;
+      if (index === 0) return;
+      const src = project.sources[index];
+      if (!src) return;
+
+      const segs = project.segments.filter((s) => s.sourceIndex === index);
+      const isPristine =
+        segs.length === 1 &&
+        segs[0].startSec === 0 &&
+        segs[0].endSec === src.durationSec;
+      if (!isPristine) {
+        const ok = window.confirm(
+          `Remove "${src.path.split("/").pop()}"?\n\nIts cuts will be discarded.`,
+        );
+        if (!ok) return;
+      }
+
+      const newSources = project.sources.filter((_, i) => i !== index);
+      const newSegments = project.segments
+        .filter((s) => s.sourceIndex !== index)
+        .map((s) =>
+          s.sourceIndex > index ? { ...s, sourceIndex: s.sourceIndex - 1 } : s,
+        );
+
+      setProject({ ...project, sources: newSources, segments: newSegments });
+      setActiveSourceIndex((cur) => {
+        if (cur === index) return 0;
+        if (cur > index) return cur - 1;
+        return cur;
+      });
+      setInPoint(null);
+      setOutPoint(null);
+      setSilences([]);
+      setSourceTime(0);
+      flash(`Removed ${src.path.split("/").pop() ?? "clip"}`);
+    },
+    [project, flash],
+  );
+
   const appendClip = useCallback(async () => {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const chosen = await open({
@@ -489,8 +530,23 @@ export default function Editor({ videoPath, onClose }: Props) {
     );
   }
 
-  const transcriptForSource0 =
-    project.transcript && project.transcript.sourceIndex === 0 ? project.transcript : null;
+  const transcript = project.transcript ?? null;
+  const transcriptActive =
+    transcript !== null && transcript.sourceIndex === activeSourceIndex;
+  const transcriptSourceLabel = transcript
+    ? project.sources[transcript.sourceIndex]?.path.split("/").pop()
+    : undefined;
+
+  const seekInTranscript = (sec: number) => {
+    if (!transcript) return;
+    if (transcript.sourceIndex !== activeSourceIndex) {
+      setActiveSourceIndex(transcript.sourceIndex);
+      setInPoint(null);
+      setOutPoint(null);
+      setSilences([]);
+    }
+    setSourceTime(sec);
+  };
 
   const currentStem =
     source.path.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
@@ -525,11 +581,13 @@ export default function Editor({ videoPath, onClose }: Props) {
         </div>
         <aside className="w-80 shrink-0 overflow-hidden border-l border-border bg-bg-raised">
           <Transcript
-            transcript={transcriptForSource0}
+            transcript={transcript}
             sourceTime={sourceTime}
-            onSeek={seek}
+            onSeek={seekInTranscript}
             busy={transcribing}
             onTranscribe={transcribe}
+            transcriptActive={transcriptActive}
+            transcriptSourceLabel={transcriptSourceLabel}
           />
         </aside>
       </div>
@@ -567,6 +625,7 @@ export default function Editor({ videoPath, onClose }: Props) {
         silences={silences}
         onScrub={seek}
         onSelectSource={selectSource}
+        onRemoveSource={removeSource}
       />
 
       {hovering && (

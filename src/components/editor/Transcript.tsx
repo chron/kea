@@ -8,6 +8,8 @@ type Props = {
   onSeek: (sec: number) => void;
   busy?: boolean;
   onTranscribe: () => void;
+  transcriptActive: boolean;
+  transcriptSourceLabel?: string;
 };
 
 export default function Transcript({
@@ -16,16 +18,18 @@ export default function Transcript({
   onSeek,
   busy,
   onTranscribe,
+  transcriptActive,
+  transcriptSourceLabel,
 }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
 
   const activeIndex = useMemo(() => {
-    if (!transcript) return -1;
+    if (!transcript || !transcriptActive) return -1;
     return transcript.segments.findIndex(
       (s) => sourceTime >= s.startSec && sourceTime < s.endSec,
     );
-  }, [transcript, sourceTime]);
+  }, [transcript, sourceTime, transcriptActive]);
 
   useEffect(() => {
     if (activeIndex < 0) return;
@@ -60,7 +64,19 @@ export default function Transcript({
           {busy ? "…" : "Re-run"}
         </button>
       </div>
-      <div ref={listRef} className="flex-1 overflow-y-auto">
+      {!transcriptActive && (
+        <div className="border-b border-border bg-bg-elevated/50 px-3 py-1.5 text-[11px] text-text-faint">
+          Transcript is for{" "}
+          <span className="text-text-dim">{transcriptSourceLabel ?? "another clip"}</span>
+          . Click a line to jump back.
+        </div>
+      )}
+      <div
+        ref={listRef}
+        className={
+          "flex-1 overflow-y-auto " + (transcriptActive ? "" : "opacity-60")
+        }
+      >
         {transcript.segments.map((seg, i) => {
           const active = i === activeIndex;
           return (

@@ -12,6 +12,7 @@ type Props = {
   silences?: SilenceRange[];
   onScrub: (sec: number) => void;
   onSelectSource: (index: number) => void;
+  onRemoveSource: (index: number) => void;
 };
 
 export default function Timeline({
@@ -24,6 +25,7 @@ export default function Timeline({
   silences,
   onScrub,
   onSelectSource,
+  onRemoveSource,
 }: Props) {
   return (
     <div className="flex flex-col gap-2 border-t border-border bg-bg-raised px-4 py-3">
@@ -41,6 +43,7 @@ export default function Timeline({
           silences={i === activeSourceIndex ? silences : undefined}
           onScrub={onScrub}
           onSelect={() => onSelectSource(i)}
+          onRemove={i > 0 ? () => onRemoveSource(i) : undefined}
         />
       ))}
     </div>
@@ -59,6 +62,7 @@ type RowProps = {
   silences?: SilenceRange[];
   onScrub: (sec: number) => void;
   onSelect: () => void;
+  onRemove?: () => void;
 };
 
 function SourceRow({
@@ -73,6 +77,7 @@ function SourceRow({
   silences,
   onScrub,
   onSelect,
+  onRemove,
 }: RowProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -117,16 +122,31 @@ function SourceRow({
 
   return (
     <div>
-      <div className="flex items-center justify-between font-mono text-[11px] text-text-faint">
+      <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-text-faint">
         <span className="truncate text-text-dim" title={label}>
           {label}
         </span>
-        <span className="shrink-0 pl-2">
-          {playheadSec !== null && (
-            <span className="text-text-dim">{formatTime(playheadSec)} / </span>
+        <div className="flex shrink-0 items-center gap-1.5 pl-2">
+          <span>
+            {playheadSec !== null && (
+              <span className="text-text-dim">{formatTime(playheadSec)} / </span>
+            )}
+            {formatTime(durationSec)}
+          </span>
+          {onRemove && (
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              className="rounded px-1 leading-none text-text-faint hover:bg-bg-elevated hover:text-danger"
+              title="Remove clip"
+            >
+              ×
+            </button>
           )}
-          {formatTime(durationSec)}
-        </span>
+        </div>
       </div>
       <div
         ref={barRef}
