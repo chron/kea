@@ -1,26 +1,79 @@
 import { useCallback, useRef } from "react";
-import type { Segment, SilenceRange } from "../../lib/types";
+import type { Segment, SilenceRange, SourceInfo } from "../../lib/types";
 import { formatTime } from "../../lib/timeline";
 
 type Props = {
-  durationSec: number;
+  sources: SourceInfo[];
+  activeSourceIndex: number;
   segments: Segment[];
   playheadSec: number;
   inPoint: number | null;
   outPoint: number | null;
   silences?: SilenceRange[];
   onScrub: (sec: number) => void;
+  onSelectSource: (index: number) => void;
 };
 
 export default function Timeline({
-  durationSec,
+  sources,
+  activeSourceIndex,
   segments,
   playheadSec,
   inPoint,
   outPoint,
   silences,
   onScrub,
+  onSelectSource,
 }: Props) {
+  return (
+    <div className="flex flex-col gap-2 border-t border-border bg-bg-raised px-4 py-3">
+      {sources.map((src, i) => (
+        <SourceRow
+          key={i}
+          index={i}
+          label={src.path.split("/").pop() ?? `Source ${i + 1}`}
+          durationSec={src.durationSec}
+          segments={segments}
+          isActive={i === activeSourceIndex}
+          playheadSec={i === activeSourceIndex ? playheadSec : null}
+          inPoint={i === activeSourceIndex ? inPoint : null}
+          outPoint={i === activeSourceIndex ? outPoint : null}
+          silences={i === activeSourceIndex ? silences : undefined}
+          onScrub={onScrub}
+          onSelect={() => onSelectSource(i)}
+        />
+      ))}
+    </div>
+  );
+}
+
+type RowProps = {
+  index: number;
+  label: string;
+  durationSec: number;
+  segments: Segment[];
+  isActive: boolean;
+  playheadSec: number | null;
+  inPoint: number | null;
+  outPoint: number | null;
+  silences?: SilenceRange[];
+  onScrub: (sec: number) => void;
+  onSelect: () => void;
+};
+
+function SourceRow({
+  index,
+  label,
+  durationSec,
+  segments,
+  isActive,
+  playheadSec,
+  inPoint,
+  outPoint,
+  silences,
+  onScrub,
+  onSelect,
+}: RowProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
 
@@ -36,6 +89,10 @@ export default function Timeline({
   );
 
   const handlePointerDown = (e: React.PointerEvent) => {
+    if (!isActive) {
+      onSelect();
+      return;
+    }
     draggingRef.current = true;
     (e.target as Element).setPointerCapture(e.pointerId);
     onScrub(toSec(e.clientX));
@@ -56,39 +113,50 @@ export default function Timeline({
   const selectionEnd =
     inPoint !== null && outPoint !== null ? Math.max(inPoint, outPoint) : null;
 
-  return (
-    <div className="flex flex-col gap-1.5 border-t border-border bg-bg-raised px-4 py-3">
-      <div className="flex items-center justify-between font-mono text-[11px] text-text-faint">
-        <span>0:00</span>
-        <span className="text-text-dim">{formatTime(playheadSec)}</span>
-        <span>{formatTime(durationSec)}</span>
-      </div>
+  const kept = segments.filter((s) => s.sourceIndex === index);
 
+  return (
+    <div>
+      <div className="flex items-center justify-between font-mono text-[11px] text-text-faint">
+        <span className="truncate text-text-dim" title={label}>
+          {label}
+        </span>
+        <span className="shrink-0 pl-2">
+          {playheadSec !== null && (
+            <span className="text-text-dim">{formatTime(playheadSec)} / </span>
+          )}
+          {formatTime(durationSec)}
+        </span>
+      </div>
       <div
         ref={barRef}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="relative h-12 cursor-pointer rounded-md bg-bg-elevated"
+        className={
+          "relative rounded-md bg-bg-elevated transition-all " +
+          (isActive ? "h-12 cursor-pointer" : "h-8 cursor-pointer opacity-70")
+        }
       >
-        {/* Cut regions: the whole bar is a "cut" background; kept segments are drawn on top. */}
         <div className="absolute inset-0 rounded-md bg-bg" />
 
-        {segments
-          .filter((s) => s.sourceIndex === 0)
-          .map((s, i) => (
-            <div
-              key={`${s.startSec}-${s.endSec}-${i}`}
-              className="absolute top-0 bottom-0 bg-accent/20 ring-1 ring-accent/40"
-              style={{
-                left: `${pct(s.startSec)}%`,
-                width: `${pct(s.endSec - s.startSec)}%`,
-              }}
-            />
-          ))}
+        {kept.map((s, i) => (
+          <div
+            key={`${s.startSec}-${s.endSec}-${i}`}
+            className={
+              "absolute top-0 bottom-0 " +
+              (isActive
+                ? "bg-accent/20 ring-1 ring-accent/40"
+                : "bg-text-dim/15 ring-1 ring-text-dim/25")
+            }
+            style={{
+              left: `${pct(s.startSec)}%`,
+              width: `${pct(s.endSec - s.startSec)}%`,
+            }}
+          />
+        ))}
 
-        {/* Detected silences */}
         {silences?.map((s, i) => (
           <div
             key={`silence-${i}`}
@@ -100,7 +168,6 @@ export default function Timeline({
           />
         ))}
 
-        {/* Selection range */}
         {selectionStart !== null && selectionEnd !== null && (
           <div
             className="absolute top-0 bottom-0 bg-danger/30 ring-1 ring-danger"
@@ -111,22 +178,21 @@ export default function Timeline({
           />
         )}
 
-        {/* In marker */}
         {inPoint !== null && (
           <Marker label="I" color="bg-emerald-500" at={pct(inPoint)} />
         )}
-        {/* Out marker */}
         {outPoint !== null && (
           <Marker label="O" color="bg-danger" at={pct(outPoint)} />
         )}
 
-        {/* Playhead */}
-        <div
-          className="pointer-events-none absolute top-0 bottom-0 w-px bg-white"
-          style={{ left: `${pct(playheadSec)}%` }}
-        >
-          <div className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-sm bg-white" />
-        </div>
+        {playheadSec !== null && (
+          <div
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-white"
+            style={{ left: `${pct(playheadSec)}%` }}
+          >
+            <div className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-sm bg-white" />
+          </div>
+        )}
       </div>
     </div>
   );

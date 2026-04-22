@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../../lib/api";
 import { suggestFilename } from "../../lib/llm";
+import { useFileDrop } from "../../lib/useFileDrop";
 import type { Project, SilenceRange } from "../../lib/types";
 import {
   clampToKept,
@@ -34,10 +35,13 @@ export default function Editor({ videoPath, onClose }: Props) {
   const [detectingSilence, setDetectingSilence] = useState(false);
   const [silences, setSilences] = useState<SilenceRange[]>([]);
   const [renaming, setRenaming] = useState(false);
+  const [appending, setAppending] = useState(false);
+  const [activeSourceIndex, setActiveSourceIndex] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
 
   const source = project?.sources[0];
-  const duration = source?.durationSec ?? 0;
+  const activeSource = project?.sources[activeSourceIndex];
+  const duration = activeSource?.durationSec ?? 0;
 
   // Load / create project on mount.
   useEffect(() => {
@@ -94,25 +98,42 @@ export default function Editor({ videoPath, onClose }: Props) {
   const seek = useCallback(
     (sec: number) => {
       if (!project) return;
-      const clamped = clampToKept(project.segments, 0, Math.max(0, Math.min(duration, sec)));
+      const clamped = clampToKept(
+        project.segments,
+        activeSourceIndex,
+        Math.max(0, Math.min(duration, sec)),
+      );
       setSourceTime(clamped);
     },
-    [project, duration],
+    [project, duration, activeSourceIndex],
+  );
+
+  const selectSource = useCallback(
+    (index: number) => {
+      if (!project) return;
+      const first = project.segments.find((s) => s.sourceIndex === index);
+      setActiveSourceIndex(index);
+      setSourceTime(first?.startSec ?? 0);
+      setInPoint(null);
+      setOutPoint(null);
+      setSilences([]);
+    },
+    [project],
   );
 
   const jumpStart = useCallback(() => {
     if (!project) return;
-    const first = project.segments.find((s) => s.sourceIndex === 0);
+    const first = project.segments.find((s) => s.sourceIndex === activeSourceIndex);
     setSourceTime(first?.startSec ?? 0);
-  }, [project]);
+  }, [project, activeSourceIndex]);
 
   const jumpEnd = useCallback(() => {
     if (!project) return;
     const lastKept = [...project.segments]
       .reverse()
-      .find((s) => s.sourceIndex === 0);
+      .find((s) => s.sourceIndex === activeSourceIndex);
     if (lastKept) setSourceTime(lastKept.endSec);
-  }, [project]);
+  }, [project, activeSourceIndex]);
 
   const markIn = useCallback(() => {
     setInPoint(sourceTime);
@@ -135,16 +156,16 @@ export default function Editor({ videoPath, onClose }: Props) {
     if (!project || inPoint === null || outPoint === null) return;
     const start = Math.min(inPoint, outPoint);
     const end = Math.max(inPoint, outPoint);
-    const newSegments = cutRange(project.segments, 0, start, end);
+    const newSegments = cutRange(project.segments, activeSourceIndex, start, end);
     setProject({ ...project, segments: newSegments });
     setInPoint(null);
     setOutPoint(null);
     setSourceTime((t) => {
-      const next = nextKeptSegmentAt(newSegments, 0, end);
+      const next = nextKeptSegmentAt(newSegments, activeSourceIndex, end);
       return next ? next.startSec : t;
     });
     flash(`Cut ${formatTime(end - start)}`);
-  }, [project, inPoint, outPoint, flash]);
+  }, [project, inPoint, outPoint, activeSourceIndex, flash]);
 
   const detectSilence = useCallback(async () => {
     if (!project) return;
@@ -152,7 +173,7 @@ export default function Editor({ videoPath, onClose }: Props) {
     try {
       const settings = await api.getSettings();
       const ranges = await api.detectSilence(
-        project.sources[0].path,
+        project.sources[activeSourceIndex].path,
         settings.silenceThresholdDb,
         settings.silenceMinSec,
       );
@@ -167,14 +188,16 @@ export default function Editor({ videoPath, onClose }: Props) {
     } finally {
       setDetectingSilence(false);
     }
-  }, [project, flash]);
+  }, [project, activeSourceIndex, flash]);
 
   const resetCuts = useCallback(() => {
     if (!project) return;
-    const fullSpan = [
-      { sourceIndex: 0, startSec: 0, endSec: project.sources[0].durationSec },
-    ];
-    setProject({ ...project, segments: fullSpan });
+    const fullSpans = project.sources.map((s, i) => ({
+      sourceIndex: i,
+      startSec: 0,
+      endSec: s.durationSec,
+    }));
+    setProject({ ...project, segments: fullSpans });
     setInPoint(null);
     setOutPoint(null);
     setSilences([]);
@@ -185,7 +208,7 @@ export default function Editor({ videoPath, onClose }: Props) {
     if (!project || silences.length === 0) return;
     let next = project.segments;
     for (const s of silences) {
-      next = cutRange(next, 0, s.startSec, s.endSec);
+      next = cutRange(next, activeSourceIndex, s.startSec, s.endSec);
     }
     setProject({ ...project, segments: next });
     const count = silences.length;
@@ -193,7 +216,64 @@ export default function Editor({ videoPath, onClose }: Props) {
     setInPoint(null);
     setOutPoint(null);
     flash(`Cut ${count} silence${count === 1 ? "" : "s"}`);
-  }, [project, silences, flash]);
+  }, [project, silences, activeSourceIndex, flash]);
+
+  const appendClipAtPath = useCallback(
+    async (path: string) => {
+      if (!project) return;
+      setAppending(true);
+      try {
+        const probe = await api.probeVideo(path);
+        const newIndex = project.sources.length;
+        const primary = project.sources[0];
+        if (primary && probe.codecInfo !== primary.codecInfo) {
+          const proceed = window.confirm(
+            `Codec mismatch — lossless concat may fail.\n\nPrimary: ${primary.codecInfo}\nAppended: ${probe.codecInfo}\n\nAppend anyway?`,
+          );
+          if (!proceed) return;
+        }
+
+        setProject({
+          ...project,
+          sources: [
+            ...project.sources,
+            { path, durationSec: probe.durationSec, codecInfo: probe.codecInfo },
+          ],
+          segments: [
+            ...project.segments,
+            { sourceIndex: newIndex, startSec: 0, endSec: probe.durationSec },
+          ],
+        });
+        flash(`Appended ${path.split("/").pop() ?? "clip"}`);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setAppending(false);
+      }
+    },
+    [project, flash],
+  );
+
+  const appendClip = useCallback(async () => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const chosen = await open({
+      title: "Append clip",
+      multiple: false,
+      filters: [{ name: "Video", extensions: ["mp4", "mov", "mkv", "m4v"] }],
+    });
+    if (!chosen || typeof chosen !== "string") return;
+    await appendClipAtPath(chosen);
+  }, [appendClipAtPath]);
+
+  const onDropped = useCallback(
+    async (paths: string[]) => {
+      for (const p of paths) {
+        await appendClipAtPath(p);
+      }
+    },
+    [appendClipAtPath],
+  );
+  const hovering = useFileDrop(onDropped);
 
   const transcribe = useCallback(async () => {
     if (!project) return;
@@ -382,8 +462,8 @@ export default function Editor({ videoPath, onClose }: Props) {
 
   const editedPlayhead = useMemo(() => {
     if (!project) return 0;
-    return sourceToEdited(project.segments, 0, sourceTime) ?? 0;
-  }, [project, sourceTime]);
+    return sourceToEdited(project.segments, activeSourceIndex, sourceTime) ?? 0;
+  }, [project, activeSourceIndex, sourceTime]);
 
   const canCut = inPoint !== null && outPoint !== null && inPoint !== outPoint;
 
@@ -429,11 +509,16 @@ export default function Editor({ videoPath, onClose }: Props) {
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-hidden">
           <VideoPlayer
-            sourcePath={source.path}
+            sources={project.sources}
+            activeSourceIndex={activeSourceIndex}
             segments={project.segments}
             sourceTime={sourceTime}
             isPlaying={isPlaying}
             onSourceTimeChange={setSourceTime}
+            onActiveSourceChange={(index, sec) => {
+              setActiveSourceIndex(index);
+              setSourceTime(sec);
+            }}
             onPlayingChange={setIsPlaying}
             onEnded={() => setIsPlaying(false)}
           />
@@ -462,6 +547,8 @@ export default function Editor({ videoPath, onClose }: Props) {
         onExport={exportEdit}
         onDetectSilence={detectSilence}
         onCutAllSilences={cutAllSilences}
+        onAppendClip={appendClip}
+        appending={appending}
         canCut={canCut}
         exporting={exporting}
         detectingSilence={detectingSilence}
@@ -471,14 +558,24 @@ export default function Editor({ videoPath, onClose }: Props) {
       />
 
       <Timeline
-        durationSec={duration}
+        sources={project.sources}
+        activeSourceIndex={activeSourceIndex}
         segments={project.segments}
         playheadSec={sourceTime}
         inPoint={inPoint}
         outPoint={outPoint}
         silences={silences}
         onScrub={seek}
+        onSelectSource={selectSource}
       />
+
+      {hovering && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-accent/10 backdrop-blur-sm">
+          <div className="rounded-xl border-2 border-dashed border-accent bg-bg-raised/80 px-8 py-6 text-lg font-medium text-accent">
+            Drop to append clip
+          </div>
+        </div>
+      )}
 
       {status && (
         <div className="pointer-events-none fixed left-1/2 top-16 -translate-x-1/2 rounded-md bg-bg-elevated/90 px-3 py-1.5 text-xs text-text backdrop-blur">

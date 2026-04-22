@@ -147,6 +147,29 @@ export function formatTime(sec: number): string {
   return `${base}.${String(ms).padStart(3, "0").slice(0, 2)}`;
 }
 
+/**
+ * Given the currently-playing source position, find the next segment to play
+ * across ALL sources in segments[] order. Used by the preview player to advance
+ * past cuts and across source boundaries.
+ */
+export function findNextSegmentAfter(
+  segments: Segment[],
+  currentSourceIndex: number,
+  currentSourceSec: number,
+): Segment | null {
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i];
+    if (
+      s.sourceIndex === currentSourceIndex &&
+      currentSourceSec >= s.startSec &&
+      currentSourceSec < s.endSec
+    ) {
+      return segments[i + 1] ?? null;
+    }
+  }
+  return null;
+}
+
 export function clampToKept(
   segments: Segment[],
   sourceIndex: number,

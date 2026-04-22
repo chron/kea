@@ -15,9 +15,11 @@ type Props = {
   onExport: () => void;
   onDetectSilence: () => void;
   onCutAllSilences: () => void;
+  onAppendClip: () => void;
   canCut: boolean;
   exporting: boolean;
   detectingSilence: boolean;
+  appending: boolean;
   silenceCount: number;
   segments: Segment[];
   sourceDuration: number;
@@ -36,9 +38,11 @@ export default function Toolbar({
   onExport,
   onDetectSilence,
   onCutAllSilences,
+  onAppendClip,
   canCut,
   exporting,
   detectingSilence,
+  appending,
   silenceCount,
   segments,
   sourceDuration,
@@ -97,6 +101,16 @@ export default function Toolbar({
           Reset
         </TextButton>
       )}
+
+      <Divider />
+
+      <TextButton
+        title="Append another clip to this project"
+        onClick={onAppendClip}
+        disabled={appending}
+      >
+        {appending ? "Appending…" : "Append clip"}
+      </TextButton>
 
       <Divider />
 

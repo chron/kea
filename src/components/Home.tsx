@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
+import { useFileDrop } from "../lib/useFileDrop";
 import type { MovieEntry, RecentProject } from "../lib/types";
 
 type Props = {
@@ -47,8 +48,11 @@ export default function Home({ onOpen }: Props) {
     return movies.filter((m) => m.name.toLowerCase().includes(q));
   }, [movies, query]);
 
+  const onDropped = useCallback((paths: string[]) => onOpen(paths[0]), [onOpen]);
+  const hovering = useFileDrop(onDropped);
+
   return (
-    <div className="mx-auto flex h-full max-w-4xl flex-col gap-6 px-6 py-6">
+    <div className="relative mx-auto flex h-full max-w-4xl flex-col gap-6 px-6 py-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Your videos</h1>
         <input
@@ -89,6 +93,8 @@ export default function Home({ onOpen }: Props) {
           </div>
         </Section>
       )}
+
+      {hovering && <DropOverlay label="Drop to open" />}
 
       <Section
         title={`Movies folder (${filtered.length})`}
@@ -152,6 +158,16 @@ function Row({
       <span className="truncate font-mono text-sm">{primary}</span>
       <span className="ml-4 shrink-0 text-xs text-text-dim">{secondary}</span>
     </button>
+  );
+}
+
+function DropOverlay({ label }: { label: string }) {
+  return (
+    <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-accent/10 backdrop-blur-sm">
+      <div className="rounded-xl border-2 border-dashed border-accent bg-bg-raised/80 px-8 py-6 text-lg font-medium text-accent">
+        {label}
+      </div>
+    </div>
   );
 }
 
