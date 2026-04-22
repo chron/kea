@@ -1,26 +1,43 @@
 use anyhow::{Context, Result};
+use std::path::Path;
 use std::process::Command;
 
-pub fn ffmpeg_path() -> Option<String> {
-    Command::new("/usr/bin/env")
-        .args(["which", "ffmpeg"])
+// macOS GUI apps launched from Finder get a minimal PATH that excludes
+// Homebrew's bin dirs, so `which` alone isn't enough — probe common
+// install locations too.
+const FALLBACK_DIRS: &[&str] = &[
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/opt/local/bin",
+];
+
+fn resolve(bin: &str) -> Option<String> {
+    let via_which = Command::new("/usr/bin/env")
+        .args(["which", bin])
         .output()
         .ok()
         .filter(|o| o.status.success())
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty());
+    if via_which.is_some() {
+        return via_which;
+    }
+    for dir in FALLBACK_DIRS {
+        let candidate = format!("{dir}/{bin}");
+        if Path::new(&candidate).is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+pub fn ffmpeg_path() -> Option<String> {
+    resolve("ffmpeg")
 }
 
 pub fn ffprobe_path() -> Option<String> {
-    Command::new("/usr/bin/env")
-        .args(["which", "ffprobe"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
+    resolve("ffprobe")
 }
 
 pub fn is_available() -> bool {

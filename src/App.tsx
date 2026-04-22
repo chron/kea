@@ -98,13 +98,29 @@ function NavButton({
 }
 
 function FfmpegMissingBanner() {
+  const [copied, setCopied] = useState(false);
+  const cmd = "brew install ffmpeg";
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore — nothing useful to do
+    }
+  };
   return (
     <div className="border-b border-border bg-danger/10 px-4 py-2 text-sm text-danger">
       <span className="font-medium">FFmpeg not found on PATH.</span>{" "}
       Install it with{" "}
-      <code className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs">
-        brew install ffmpeg
-      </code>{" "}
+      <button
+        type="button"
+        onClick={copy}
+        title="Click to copy"
+        className="rounded bg-bg-elevated px-1.5 py-0.5 font-mono text-xs text-text hover:bg-border"
+      >
+        {copied ? "Copied!" : cmd}
+      </button>{" "}
       and restart Kea.
     </div>
   );
